@@ -10,8 +10,10 @@ data class LevelData(
     val playerSpawnX: Float,
     val playerSpawnY: Float,
     val roomWidth: Float,
-    val roomHeight: Float
-)
+    val roomHeight: Float,
+    val checkpoints: List<androidx.compose.ui.geometry.Rect> = emptyList()
+
+    )
 
 enum class PatrolType { RANGE, TIMER }
 enum class SpikeDir { LEFT, RIGHT, UP, DOWN }

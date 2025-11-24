@@ -122,7 +122,7 @@ private fun Offset.limit(maxLen: Float): Offset {
 private fun JumpButton(
     onJumpPressed: () -> Unit
 ) {
-    // 🔹 Botón táctil que reacciona al PRESIONAR (no al soltar)
+    // Botón táctil que reacciona al PRESIONAR (no al soltar)
     Surface(
         modifier = Modifier
             .size(96.dp)
@@ -135,6 +135,6 @@ private fun JumpButton(
                 )
             },
         shape = CircleShape,
-        color = Color(0x22FFFFFF) // supertransparente
+        color = Color(0x43FFFFFF) // supertransparente
     ) {}
 }

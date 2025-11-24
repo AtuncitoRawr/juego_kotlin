@@ -43,7 +43,6 @@ data class Player(
     fun rect(): Rect = Rect(x, y, x + w, y + h)
 }
 
-// ⬇️ Agrega esto (o extiende tu Enemy para incluir los spawn)
 data class Enemy (
     var x: Float = 0f,
     var y: Float = 0f,
@@ -63,7 +62,7 @@ data class Enemy (
     // RANGE
     var patrolLeft: Float = 0f,
     var patrolRight: Float = 0f,
-    var useMaxDistance: Boolean = false,   // si prefieres distancia en vez de límites absolutos
+    var useMaxDistance: Boolean = false,
     var maxDistanceFromSpawn: Float = 300f,
 // TIMER
     var patrolFlipEvery: Float = 2.5f,     // segundos
@@ -78,7 +77,7 @@ data class Enemy (
         if (spawnX.isNaN()) spawnX = x
         if (spawnY.isNaN()) spawnY = y
 
-        // ✅ Si usan RANGE pero no definiste límites, crea uno centrado en el spawn
+        //Si usan RANGE pero no definiste límites, crea uno centrado en el spawn
         if (patrolType == PatrolType.RANGE && patrolLeft == 0f && patrolRight == 0f) {
             patrolLeft = spawnX - maxDistanceFromSpawn
             patrolRight = spawnX + maxDistanceFromSpawn
@@ -99,44 +98,81 @@ data class Door(val rect: Rect)
 
 
 class GameState {
+    // Tamaño del mundo
     var roomWidth by mutableStateOf(1280f)
     var roomHeight by mutableStateOf(720f)
+
+    // Player y entidades
     val player = Player()
     val enemies = mutableListOf<Enemy>()
     val platforms = mutableListOf<Platform>()
     val spikes = mutableListOf<Spike>()
-    // Inputs
+    val doors = mutableListOf<Door>()
+    val secretDoors = mutableListOf<Door>()
+    val ghostPlatforms = mutableListOf<Platform>()
+
+    // INPUTS
     var inputMoveDir: Float = 0f
     var inputJumpPressedOnce: Boolean = false
-    // Camara
+
+    // Cámara
     var camX by mutableStateOf(0f)
     var camY by mutableStateOf(0f)
-    var camWidth = 1280f
-    var camHeight = 720f
-    // dentro de GameState
-    var zoom by mutableStateOf(1f) // 1f = normal, 2f = acercar (zoom-in), 0.75f = alejar (zoom-out)
+    var camWidth: Float = 1280f
+    var camHeight: Float = 720f
+    var zoom by mutableStateOf(1f)
 
-    val doors = mutableListOf<Door>()          // ⬅️ puertas del nivel
-    val secretDoors = mutableListOf<Door>()
-    var secretDoorTriggered: Boolean = false
-    val ghostPlatforms = mutableListOf<Platform>()
-    var endRequested: Boolean = false
-    var currentLevel: Int = 1               // índice actual (1 = Level1.txt)
+    // Flujo de niveles
+    var currentLevel: Int = 1
     var finalLevel: Int = 4
+    var nextLevelRequested: Boolean = false
+    var endRequested: Boolean = false
     var gameEnded: Boolean = false
+    var secretDoorTriggered: Boolean = false
 
-    var startedAtNanos: Long = 0L    // se setea al entrar a GameScreen
-    var endElapsedMs: Long = 0L      // tiempo total al terminar
+    // Métricas
+    var startedAtNanos: Long = 0L
+    var endElapsedMs: Long = 0L
     var deaths: Int = 0
-    var nextLevelRequested: Boolean = false    // bandera para pedir cargar siguiente
 
+    // =============================
+    //     CHECKPOINTS (Nuevo)
+    // =============================
 
+    // Lista de checkpoints del nivel cargada desde LevelLoader
+    var checkpoints: List<Rect> = emptyList()
 
+    // Estado del checkpoint activado
+    var hasCheckpoint: Boolean = false
+    var checkpointX: Float = 0f
+    var checkpointY: Float = 0f
+
+    // Para evitar activar el mismo checkpoint 2 veces
+    var lastCheckpointIndex: Int = -1
+
+    /** Llamado al cargar un nivel nuevo */
+    fun clearCheckpoint() {
+        hasCheckpoint = false
+        lastCheckpointIndex = -1
+        checkpointX = 0f
+        checkpointY = 0f
+    }
+
+    // =============================
+    //     RESET DEL NIVEL
+    // =============================
 
     fun reset() {
-        // ❗ No limpiar plataformas aquí: el nivel ya está creado en create()
-        player.x = player.spawnX
-        player.y = player.spawnY
+
+        // Respawn en checkpoint si existe
+        if (hasCheckpoint) {
+            player.x = checkpointX
+            player.y = checkpointY
+        } else {
+            player.x = player.spawnX
+            player.y = player.spawnY
+        }
+
         player.xspd = 0f
         player.yspd = 0f
         player.moveDir = 0f
@@ -149,6 +185,7 @@ class GameState {
         player.jumpCount = 0
         player.jumpMax = 1
 
+        // Reset enemigos a spawn
         enemies.forEach { e ->
             e.x = e.spawnX
             e.y = e.spawnY

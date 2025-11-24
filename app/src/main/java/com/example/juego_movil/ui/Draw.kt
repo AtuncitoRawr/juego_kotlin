@@ -11,15 +11,17 @@ import com.example.juego_movil.model.GameState
 import com.example.juego_movil.model.spikeTriangle
 
 fun drawGame(drawScope: DrawScope, game: GameState) = with(drawScope) {
-    // fondo
+
     drawRect(Color(0xFF0D0D1A))
 
-    // cámara + zoom
     withTransform({
-        translate(-game.camX, -game.camY) // en unidades del mundo
-        scale(game.zoom)                  // zoom
+        translate(-game.camX, -game.camY)
+        scale(game.zoom)
     }) {
-        // plataformas
+
+        // ============================================
+        // 1. PLATAFORMAS
+        // ============================================
         game.platforms.forEach {
             drawRect(
                 color = Color(0xFF2E7D32),
@@ -28,7 +30,41 @@ fun drawGame(drawScope: DrawScope, game: GameState) = with(drawScope) {
             )
         }
 
-        // player
+
+        // ============================================
+// CHECKPOINTS CON BRILLO PULSANTE
+// ============================================
+        game.checkpoints.forEach { cp ->
+            val cx = cp.left + cp.width / 2f
+            val cy = cp.top + cp.height / 2f
+
+            // radio base del círculo
+            val baseRadius = cp.width * 0.38f
+
+            // animación pulsante: 0.85 → 1.15
+            val pulse = (1f + kotlin.math.sin((System.currentTimeMillis() % 1000) / 1000f * 6.28f) * 0.15f)
+
+            val radius = baseRadius * pulse
+
+            // brillo exterior suave
+            drawCircle(
+                color = Color(0x884CAF50),
+                radius = radius * 1.7f,
+                center = Offset(cx, cy)
+            )
+
+            // cuerpo principal
+            drawCircle(
+                color = Color(0xFF4CAF50),
+                radius = radius,
+                center = Offset(cx, cy)
+            )
+        }
+
+
+        // ============================================
+        // 3. PLAYER
+        // ============================================
         val p = game.player
         drawRect(
             color = Color(0xFF42A5F5),
@@ -36,7 +72,9 @@ fun drawGame(drawScope: DrawScope, game: GameState) = with(drawScope) {
             size = Size(p.w, p.h)
         )
 
-        // enemigos
+        // ============================================
+        // 4. ENEMIGOS
+        // ============================================
         game.enemies.forEach { e ->
             drawRect(
                 color = Color(0xFFE53935),
@@ -45,7 +83,9 @@ fun drawGame(drawScope: DrawScope, game: GameState) = with(drawScope) {
             )
         }
 
-
+        // ============================================
+        // 5. SPIKES (TRIÁNGULOS)
+        // ============================================
         game.spikes.forEach { s ->
             val tri = spikeTriangle(s)
             val path = Path().apply {
@@ -57,6 +97,9 @@ fun drawGame(drawScope: DrawScope, game: GameState) = with(drawScope) {
             drawPath(path = path, color = Color(0xFFEEEEEE))
         }
 
+        // ============================================
+        // 6. PUERTAS NORMALES
+        // ============================================
         game.doors.forEach { d ->
             drawRect(
                 color = Color.Yellow,
@@ -65,6 +108,9 @@ fun drawGame(drawScope: DrawScope, game: GameState) = with(drawScope) {
             )
         }
 
+        // ============================================
+        // 7. PUERTAS SECRETAS
+        // ============================================
         game.secretDoors.forEach { d ->
             drawRect(
                 color = Color(0xFFFFB300),
@@ -73,7 +119,9 @@ fun drawGame(drawScope: DrawScope, game: GameState) = with(drawScope) {
             )
         }
 
-        // Fantasmas (semi invisibles)
+        // ============================================
+        // 8. PLATAFORMAS FANTASMA
+        // ============================================
         game.ghostPlatforms.forEach {
             drawRect(
                 color = Color(0xFF1A1A2E).copy(alpha = 0.06f),
@@ -81,9 +129,5 @@ fun drawGame(drawScope: DrawScope, game: GameState) = with(drawScope) {
                 size = Size(it.rect.width, it.rect.height)
             )
         }
-
-
     }
 }
-
-

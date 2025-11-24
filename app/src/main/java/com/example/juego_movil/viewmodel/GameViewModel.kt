@@ -7,70 +7,140 @@ import com.example.juego_movil.model.GameState
 import com.example.juego_movil.repository.LevelRepository
 import androidx.compose.ui.unit.IntSize
 import android.content.Context
+import androidx.lifecycle.viewModelScope
+import com.example.juego_movil.repository.LocalProgressRepository
+import kotlinx.coroutines.launch
 
 class GameViewModel(
-    private val repo: LevelRepository
+    private val repo: LevelRepository,
+    private val progressRepo: LocalProgressRepository
 ) : ViewModel() {
 
-    // Estado central observable por la UI
+    // Estado observable del juego
     val game: MutableState<GameState> = mutableStateOf(GameState())
 
-    // Progreso y métricas
-    var currentLevel: Int
-        get() = game.value.currentLevel
-        set(value) { game.value.currentLevel = value }
+
+    // ==================================================
+    // =========== SISTEMA DE PROGRESO ==================
+    // ==================================================
+
+    /**
+     * Carga el progreso inicial desde la DB.
+     * Lo puedes llamar al abrir el selector de niveles si quieres.
+     */
+    suspend fun loadProgressInitial() {
+        val unlocked = progressRepo.getHighestUnlockedLevel()
+
+        game.value = game.value.apply {
+            currentLevel = currentLevel.coerceAtMost(unlocked)
+        }
+    }
+
+    /**
+     * Desbloquea el siguiente nivel si corresponde.
+     */
+    fun saveProgressIfNeeded() {
+        val levelJustCleared = game.value.currentLevel
+        val nextToUnlock = levelJustCleared + 1
 
 
+        viewModelScope.launch {
+            val currentUnlocked = progressRepo.getHighestUnlockedLevel()
+            if (nextToUnlock > currentUnlocked) {
+                progressRepo.setHighestUnlockedLevel(nextToUnlock)
+            }
+        }
+    }
 
-    // === API que usará la UI ===
 
-    /** Se llama al entrar al juego o cuando cambia el tamaño del canvas. */
+    // ==================================================
+    // === INICIALIZACIÓN Y MANEJO DE NIVELES ===========
+    // ==================================================
+
+    /** Carga el nivel actual según currentLevel. */
     fun startGame(context: Context, canvasSize: IntSize) {
-        // Marca inicio si procede, y crea/carga el nivel
-        if (game.value.startedAtNanos == 0L) game.value.startedAtNanos = System.nanoTime()
-        repo.create(context, game.value, canvasSize) // ← usa tu create() ya existente
-        // Notificar cambios (opcional si modificas referencias profundas)
+        repo.create(context, game.value, canvasSize)
+        game.value.startedAtNanos = System.nanoTime()
         game.value = game.value
     }
 
-    /** Bucle por frame: avanza la simulación dt segundos. */
-    fun step(dt: Float) {
+    fun advanceToNextLevel(context: Context, canvasSize: IntSize) {
         if (game.value.gameEnded) return
-        // Llama tu lógica de frame (mueve al Player/Enemigos, colisión, cámara, etc.)
-        // Antes tenías una función top-level step(game, dt) → ahora simplemente invócala:
-        com.example.juego_movil.step(game.value, dt)
 
-        // Gestiona señales de cambio de nivel o fin:
-        if (game.value.endRequested && !game.value.gameEnded) {
-            // Sella fin
-            game.value.endRequested = false
-            game.value.gameEnded = true
-            game.value.endElapsedMs = ((System.nanoTime() - game.value.startedAtNanos) / 1_000_000L)
+        val levelCleared = game.value.currentLevel
+        val next = levelCleared + 1
+
+        if (next <= game.value.finalLevel) {
+            // guarda progreso SOLO UNA VEZ
+            saveProgressIfNeeded()
+
+            game.value.currentLevel = next
+            game.value.nextLevelRequested = false
+            repo.create(context, game.value, canvasSize)
+
+        } else {
+            // último nivel → END
+            saveProgressIfNeeded()
+            game.value.nextLevelRequested = false
+            game.value.endRequested = true
         }
 
-        // Notificar (opcional si mutaste campos del mismo objeto)
         game.value = game.value
     }
 
-    /** Input: mover izquierda/derecha (-1..1). */
+
+    /** Puerta secreta: salta a nivel especial. */
+    fun jumpToSecretLevel(level: Int = 5) {
+        game.value.currentLevel = level
+        game.value.nextLevelRequested = true
+        game.value = game.value
+    }
+
+
+    // ==================================================
+    // ========== LÓGICA DE JUEGO POR FRAME =============
+    // ==================================================
+    fun step(dt: Float) {
+        if (game.value.gameEnded) return
+
+        com.example.juego_movil.model.step(game.value, dt)
+
+        if (game.value.endRequested && !game.value.gameEnded) {
+            game.value.gameEnded = true
+            game.value.endElapsedMs =
+                ((System.nanoTime() - game.value.startedAtNanos) / 1_000_000L)
+        }
+
+        game.value = game.value
+    }
+
+
+    // ==================================================
+    // ================ CONTROLES ========================
+    // ==================================================
+
     fun onMoveDir(dir: Float) {
-        game.value.inputMoveDir = dir.coerceIn(-1f, 1f)
+        game.value.inputMoveDir = dir
         game.value = game.value
     }
 
-    /** Input: salto (one-shot). */
     fun onJump() {
         game.value.inputJumpPressedOnce = true
         game.value = game.value
     }
 
-    /** Reset del nivel (por muerte o tecla R). */
     fun resetLevel() {
         game.value.reset()
         game.value = game.value
     }
 
-    /** Llamar cuando se confirma tocar puerta normal. */
+
+    // ==================================================
+    // ============ PUERTAS / FLUJOS INTERNOS ===========
+    // ==================================================
+
+    /*
+    Es obsoleta pero la dejo porsiacaso la llegase a necesitar
     fun requestNextLevel() {
         if (game.value.currentLevel < game.value.finalLevel) {
             game.value.currentLevel += 1
@@ -79,33 +149,7 @@ class GameViewModel(
             game.value.endRequested = true
         }
         game.value = game.value
-    }
-
-    /** Puerta secreta “F” → Ir directo al nivel 5 (o el que definas). */
-    fun jumpToSecretLevel(level: Int = 5) {
-        game.value.currentLevel = level
-        game.value.nextLevelRequested = true
-        game.value = game.value
-    }
-
-    // NUEVO en GameViewModel.kt
-    fun advanceToNextLevel(context: Context, canvasSize: IntSize) {
-        // evita repetir si ya terminó
-        if (game.value.gameEnded) return
-
-        if (game.value.currentLevel < game.value.finalLevel) {
-            game.value.currentLevel += 1
-            game.value.nextLevelRequested = false
-            // vuelve a crear/cargar el nuevo nivel usando el repo
-            repo.create(context, game.value, canvasSize)
-        } else {
-            // si ya era el último, fin del juego
-            game.value.nextLevelRequested = false
-            game.value.endRequested = true
-        }
-        // notifica cambios
-        game.value = game.value
-    }
-
-
+    }*/
 }
+
+

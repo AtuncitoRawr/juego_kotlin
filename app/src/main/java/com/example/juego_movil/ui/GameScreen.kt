@@ -5,10 +5,11 @@ import android.view.KeyEvent.KEYCODE_DPAD_LEFT
 import android.view.KeyEvent.KEYCODE_DPAD_RIGHT
 import android.view.KeyEvent.KEYCODE_R
 import android.view.KeyEvent.KEYCODE_SPACE
-import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.juego_movil.viewmodel.GameViewModel
-import com.example.juego_movil.viewmodel.GameVMFactory
+import com.example.juego_movil.viewmodel.GameVmFactory
 import com.example.juego_movil.repository.LevelRepository
+import androidx.lifecycle.viewmodel.compose.viewModel
+
 
 
 import androidx.compose.foundation.Canvas
@@ -28,7 +29,6 @@ import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.FocusRequester
-import android.view.KeyEvent as AndroidKeyEvent
 
 // Material (icono Home)
 import androidx.compose.material3.Icon
@@ -50,8 +50,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
-import com.example.juego_movil.model.GameState
-import com.example.juego_movil.step
+import androidx.lifecycle.ViewModel
+import com.example.juego_movil.repository.LocalProgressRepository
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -60,7 +60,11 @@ import kotlinx.coroutines.launch
 
 
 @Composable
-fun GameScreen(onExitToMenu: () -> Unit = {}) {
+fun GameScreen(
+    onExitToMenu: () -> Unit = {},
+    initialLevel: Int = 1,
+    progressRepo: LocalProgressRepository
+    ) {
 
     // Tiempo/muertes → UI fin de juego
     var showEnd by remember { mutableStateOf(false) }
@@ -75,7 +79,14 @@ fun GameScreen(onExitToMenu: () -> Unit = {}) {
     val scope = rememberCoroutineScope()
     val fade = remember { Animatable(0f) } // 0 = sin fade, 1 = pantalla negra
     val context = LocalContext.current
-    val vm: GameViewModel = viewModel(factory = GameVMFactory(LevelRepository()))
+    val vm: GameViewModel = androidx.lifecycle.viewmodel.compose.viewModel(
+        factory = GameVmFactory(
+            levelRepo = LevelRepository(),
+            progressRepo = progressRepo
+        )
+    )
+
+
     val game by vm.game
 
     var created by remember { mutableStateOf(false) }
@@ -122,7 +133,7 @@ fun GameScreen(onExitToMenu: () -> Unit = {}) {
                 canvasSize = size
                 if (!created && size.width > 0 && size.height > 0) {
 
-                    // 🔧 HARD RESET (evita volver directo al END al iniciar desde el menú)
+
                     vm.game.value.apply {
                         gameEnded = false
                         endRequested = false
@@ -134,7 +145,7 @@ fun GameScreen(onExitToMenu: () -> Unit = {}) {
                         endElapsedMs = 0
 
                         // nivel inicial
-                        currentLevel = 1   // <-- si tu partida empieza en otro, cámbialo aquí
+                        currentLevel = initialLevel
 
                         // tiempo de inicio
                         startedAtNanos = System.nanoTime()
@@ -171,7 +182,7 @@ fun GameScreen(onExitToMenu: () -> Unit = {}) {
 
             )
 
-            // 🔙 Botón Home casi invisible (arriba-derecha)
+            //Botón Home casi invisible (arriba-derecha)
             IconButton(
                 onClick = {
                     scope.launch {
@@ -183,7 +194,7 @@ fun GameScreen(onExitToMenu: () -> Unit = {}) {
                     .align(Alignment.TopEnd)
                     .padding(horizontal = 16.dp, vertical = 16.dp)
                     .size(36.dp)
-                    .alpha(0.3f) // casi invisible
+                    .alpha(0.5f) // casi invisible
             ) {
                 Icon(
                     imageVector = Icons.Filled.Home,
@@ -192,6 +203,13 @@ fun GameScreen(onExitToMenu: () -> Unit = {}) {
                 )
             }
         } else {
+
+            LaunchedEffect(game.gameEnded) {
+                if (game.gameEnded) {
+                    // guarda progreso (desbloquea siguiente)
+                    vm.saveProgressIfNeeded() // si lo colocaste público
+                }
+            }
             // Fondo negro sólido (sin depender de endFade)
             Canvas(
                 modifier = Modifier.fillMaxSize()

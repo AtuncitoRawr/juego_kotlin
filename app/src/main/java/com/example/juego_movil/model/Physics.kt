@@ -167,7 +167,7 @@ fun sign2D(p1: Offset, p2: Offset, p3: Offset): Float {
 
 fun spikeSupportRect(s: Spike): Rect {
     val r = s.rect
-    val t = min(r.width, r.height) * 0.18f // grosor de la franja (~18% del tile); ajústalo si quieres
+    val t = min(r.width, r.height) * 0.18f // grosor de la franja (~18% del tile)
     return when (s.dir) {
         SpikeDir.UP    -> Rect(r.left,  r.bottom - t, r.right, r.bottom)   // franja en la base (abajo)
         SpikeDir.DOWN  -> Rect(r.left,  r.top,        r.right, r.top + t)  // franja arriba
